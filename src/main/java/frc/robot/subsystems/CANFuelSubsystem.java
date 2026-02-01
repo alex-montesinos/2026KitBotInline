@@ -48,6 +48,7 @@ public class CANFuelSubsystem extends SubsystemBase {
     launcherConfig.inverted(true);
     launcherConfig.smartCurrentLimit(LAUNCHER_MOTOR_CURRENT_LIMIT);
     intakeLauncherRoller.configure(launcherConfig, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
+    launcherConfig.voltageCompensation(11.0); // This tells the motor controller that "100% power" equals 11 Volts.
   }
 
   // A method to set the rollers to values for intaking

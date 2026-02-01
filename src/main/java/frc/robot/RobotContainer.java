@@ -8,6 +8,8 @@ import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
+import edu.wpi.first.math.filter.SlewRateLimiter;
+import edu.wpi.first.wpilibj2.command.Commands;
 
 import static frc.robot.Constants.OperatorConstants.*;
 import static frc.robot.Constants.FuelConstants.*;
@@ -38,6 +40,14 @@ public class RobotContainer {
   // The autonomous chooser
   private final SendableChooser<Command> autoChooser = new SendableChooser<>();
 
+  // Limit acceleration to 3 units per second (0 to 100% in ~0.33 seconds)
+  private final SlewRateLimiter speedLimiter = new SlewRateLimiter(3.0);
+  // You can often set rotation higher (sharper turns) or the same. 
+  private final SlewRateLimiter turnLimiter = new SlewRateLimiter(3.0);
+
+  //Tracks if robot is driving backwards.
+  private boolean isDriveReversed = false;
+
   /**
    * The container for the robot. Contains subsystems, OI devices, and commands.
    */
@@ -48,6 +58,7 @@ public class RobotContainer {
     // add additional auto modes you can add additional lines here with
     // autoChooser.addOption
     autoChooser.setDefaultOption("Autonomous", Autos.exampleAuto(driveSubsystem, ballSubsystem));
+    autoChooser.addOption("Mobility Only (Just Drive)", Autos.mobilityAuto(driveSubsystem)); // Adds "Mobility Only" to the dropdown menu on the driver station
   }
 
   /**
@@ -76,18 +87,45 @@ public class RobotContainer {
     // the intake
     operatorController.a()
         .whileTrue(ballSubsystem.runEnd(() -> ballSubsystem.eject(), () -> ballSubsystem.stop()));
+    // When Driver presses 'X', flip the direction
+    driverController.x().onTrue(Commands.runOnce(() -> isDriveReversed = !isDriveReversed));
 
-    // Set the default command for the drive subsystem to the command provided by
-    // factory with the values provided by the joystick axes on the driver
-    // controller. The Y axis of the controller is inverted so that pushing the
-    // stick away from you (a negative value) drives the robot forwards (a positive
-    // value). The X-axis is also inverted so a positive value (stick to the right)
-    // results in clockwise rotation (front of the robot turning right). Both axes
-    // are also scaled down so the rotation is more easily controllable.
-    driveSubsystem.setDefaultCommand(
-        driveSubsystem.driveArcade(
-            () -> -driverController.getLeftY() * DRIVE_SCALING,
-            () -> -driverController.getRightX() * ROTATION_SCALING));
+// Turbo and Precision Modes
+driveSubsystem.setDefaultCommand(
+    driveSubsystem.driveArcade(
+        () -> {
+            // 1. Get raw input
+            double input = -driverController.getLeftY();
+
+            // 2. REVERSE LOGIC: If the mode is active, flip the sign
+            // This makes the Intake the "Front" or the Shooter the "Front"
+            if (isDriveReversed) {
+                input = -input;
+            }
+
+            // 3. TURBO LOGIC
+            double scale = 0.7; // Default
+            if (driverController.getRightTriggerAxis() > 0.5) scale = 1.0;
+            else if (driverController.getLeftTriggerAxis() > 0.5) scale = 0.35;
+
+            double targetSpeed = input * scale;
+
+            // 4. SLEW RATE LIMITER (Smooths the movement)
+            return speedLimiter.calculate(targetSpeed);
+        },
+        () -> {
+            // Turning usually stays the same (Right Stick Right = Clockwise)
+            // regardless of which side is "front"
+            double turnInput = -driverController.getRightX();
+            
+            // Apply scale/slew logic to turning
+            double turnScale = 0.7; 
+            if (driverController.getRightTriggerAxis() > 0.5) turnScale = 1.0;
+            
+            return turnLimiter.calculate(turnInput * turnScale);
+        }
+    )
+);
   }
 
   /**

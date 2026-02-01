@@ -27,4 +27,16 @@ public final class Autos {
         // Stop running the launcher
         ballSubsystem.runOnce(() -> ballSubsystem.stop()));
   }
+  // A simple auto that just drives out of the community zone for points.
+  // Useful if the shooter is broken or you are starting far away.
+  public static final Command mobilityAuto(CANDriveSubsystem driveSubsystem) {
+    return new SequentialCommandGroup(
+        // Drive at 50% speed for 2.0 seconds. 
+        // TIP: Test this on the field! 2.0 seconds is usually safe to clear the line.
+        driveSubsystem.driveArcade(() -> 0.5, () -> 0).withTimeout(2.0),
+        
+        // Stop the motors immediately after the time is up
+        driveSubsystem.driveArcade(() -> 0, () -> 0)
+    );
+  }
 }
